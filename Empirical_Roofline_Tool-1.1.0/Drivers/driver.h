@@ -15,6 +15,11 @@
   #include <mpi.h>
 #endif
 
+#ifdef ERT_QUO
+#include <quo.h>
+#include <hwloc.h>
+#endif // ERT_QUO
+
 #ifdef ERT_BGQM
   #include "bgq.util.h"
 #endif

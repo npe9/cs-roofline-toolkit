@@ -35,6 +35,10 @@ int main(int argc, char *argv[]) {
 #ifdef ERT_MPI
   int provided = -1;
   int requested;
+#ifdef ERT_QUO
+  QUO_context ctx;
+  int tres = NUMA_NODE;
+#endif // ERT_QUO
 
   #ifdef ERT_OPENMP
   requested = MPI_THREAD_FUNNELED;
@@ -43,9 +47,19 @@ int main(int argc, char *argv[]) {
   MPI_Init(&argc, &argv);
   #endif // ERT_OPENMP
 
+  #ifdef ERT_QUO
+  QUO_create(&ctx, MPI_COMM_WORLD);
+  #endif // ERT_QUO
+
   MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
+  #ifdef ERT_QUO
+  QUO_auto_distrib(ctx, tres, max_pe, &in_dset);
+  if(in_dset) {
+    /* 
+     */
+  #endif // ERT_QUO
   /* printf("The MPI binding provided thread support of: %d\n", provided); */
 #endif // ERT_MPI
 
@@ -70,6 +84,14 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "Out of memory!\n");
     return -1;
   }
+#ifdef ERT_QUa
+  #define QUO_NEXT 2
+    QUO_bind_push(ctx, tres);
+    quo_mpi_smprank2pid(mpi, rank+1, &pid);
+    hwloc_set_proc_membind(ctx->hwloc, pid, ctx->hwloc, HWLOC_MEMBIND_BIND|HWLOC_MEMBIND_MIGRATE);
+    if(rank != 0)
+      MPI_Recv(NULL, 0, rank-1, MPI_DATATYPE_NULL, QUO_NEXT);
+#endif // ERT_QUO
 
 #ifdef ERT_OPENMP
   #pragma omp parallel private(id)
@@ -230,6 +252,15 @@ int main(int argc, char *argv[]) {
     cudaDeviceReset();
 #endif
   } // parallel region
+#ifdef ERT_QUO
+  QUO_bind_pop(ctx);
+  // migrate myself out.
+  hwloc_set_proc_membind(ctx->hwloc, getpid(), ctx->hwloc, HWLOC_MEMBIND_BIND|HWLOC_MEMBIND_MIGRATE);
+  // start the next guy.
+  MPI_Send(NULL, 0, rank-1, MPI_DATATYPE_NULL, QUO_NEXT);
+  // need to page myself out of memory here.
+}
+#endif // ERT_QUO
 
 #ifdef ERT_INTEL
   _mm_free(buf);
